@@ -258,7 +258,7 @@ variable "boot_volume_backup_policy" {
 variable "boot_volume_size_in_gbs" {
   description = "The size of the boot volume in GBs."
   type        = number
-  default     = null
+  default     = 50
 }
 
 variable "preserve_boot_volume" {
