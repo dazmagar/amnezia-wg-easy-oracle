@@ -1,0 +1,44 @@
+# provider identity parameters
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaa..."
+user_ocid        = "ocid1.user.oc1..aaaaaaaa..."
+fingerprint      = "aa:bb:cc:dd:ee:ff:11:22:33:44:55:66:77:88:99:aa"
+region           = "eu-frankfurt-1"
+private_key_path = "path/to/your/oci/api/private/key.pem"
+
+# general oci parameters
+compartment_ocid = "ocid1.compartment.oc1..aaaaaaaa..."
+
+# compute instance parameters
+source_ocid           = "ocid1.image.oc1.eu-frankfurt-1.aaaaaaaa..." # Canonical-Ubuntu-24.04-2024.06.26-0
+instance_state        = "RUNNING" # RUNNING or STOPPED
+instance_display_name = "vpn-instance"
+shape                 = "VM.Standard.E2.1.Micro"
+
+# operating system parameters
+# Option 1: Path to SSH public key file
+ssh_public_keys = "path/to/your/ssh/public/key.pub"
+
+# Option 2: Inline SSH public keys (uncomment and use if needed)
+# ssh_public_keys = <<EOT
+# ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-key-comment
+# ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... another-key-comment
+# EOT
+
+# storage parameters
+boot_volume_backup_policy = "disabled" # gold, silver, bronze, disabled
+
+# networking parameters
+subnet_ocids = ["ocid1.subnet.oc1.eu-frankfurt-1.aaaaaaaa..."]
+
+# provisioning parameters
+user        = "ubuntu"
+privatekeypath = "path/to/your/ssh/private/key" # Path to private SSH key for instance access
+wg_host     = "vpn.example.com" # WireGuard server hostname or IP
+wg_password = "$2a$12$..." # WireGuard admin password (bcrypt hashed)
+
+# backup and restore parameters
+enable_wg_configs = false # Set to true to enable WireGuard config backup/restore
+backup_path       = "./modules/backup/wg_backup" # Path to backup directory
+
+# cron restart schedule
+cron_restart_schedule = "0 3 * * *" # Daily at 3 AM (cron format: minute hour day month weekday)

@@ -40,12 +40,16 @@ variable "ad_number" {
   default     = null
 }
 
-# variable "fd_number" {
-#   // for future use, adding fault domain support
-#   description = "(Updatable) The fault domain of the instance."
-#   type        = number
-#   default     = null
-# }
+variable "fd_number" {
+  type        = number
+  description = "The fault domain number of the instance (1, 2, or 3). If none is provided, OCI will automatically assign a fault domain"
+  default     = null
+
+  validation {
+    condition     = var.fd_number == null || (var.fd_number >= 1 && var.fd_number <= 3)
+    error_message = "Fault domain number must be between 1 and 3, or null for automatic assignment"
+  }
+}
 
 variable "instance_count" {
   description = "Number of identical instances to launch from a single module."
@@ -143,9 +147,8 @@ variable "resource_platform" {
 }
 
 variable "ssh_authorized_keys" {
-  #! Deprecation notice: Please use `ssh_public_keys` instead
-  description = "DEPRECATED: use ssh_public_keys instead. Public SSH keys path to be included in the ~/.ssh/authorized_keys file for the default user on the instance."
   type        = string
+  description = "DEPRECATED: Use `ssh_public_keys` instead. Public SSH keys path to be included in the ~/.ssh/authorized_keys file for the default user on the instance. This variable is kept for backward compatibility only and will be removed in a future release"
   default     = null
 }
 
@@ -162,13 +165,6 @@ variable "user_data" {
 }
 
 # networking parameters
-
-variable "assign_public_ip" {
-  #! Deprecation notice: will be removed at next major release. Use `var.public_ip` instead.
-  description = "Deprecated: use `var.public_ip` instead. Whether the VNIC should be assigned a public IP address (Always EPHEMERAL)."
-  type        = bool
-  default     = false
-}
 
 variable "hostname_label" {
   description = "The hostname for the VNIC's primary private IP."
@@ -242,12 +238,11 @@ variable "block_storage_sizes_in_gbs" {
   default     = []
 }
 
-# variable "block_storage_enable_autotune" {
-#   // for future use, adding block volume performance auto-tune
-#   description = "(Optional) (Updatable) Specifies whether the auto-tune performance is enabled for this volume."
-#   type        = bool
-#   default     = true
-# }
+variable "block_storage_enable_autotune" {
+  type        = bool
+  description = "Specifies whether the auto-tune performance is enabled for block volumes. When enabled, OCI automatically adjusts volume performance based on usage patterns"
+  default     = true
+}
 
 variable "boot_volume_backup_policy" {
   description = "Choose between default backup policies : gold, silver, bronze. Use disabled to affect no backup policy on the Boot Volume."

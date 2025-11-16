@@ -25,8 +25,9 @@ resource "oci_core_volume" "volume" {
     var.block_storage_sizes_in_gbs,
     floor(count.index / var.instance_count),
   )
-  freeform_tags = local.merged_freeform_tags
-  defined_tags  = var.defined_tags
+  is_auto_tune_enabled = var.block_storage_enable_autotune
+  freeform_tags        = local.merged_freeform_tags
+  defined_tags         = var.defined_tags
 }
 
 ####################

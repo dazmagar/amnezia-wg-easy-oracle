@@ -56,6 +56,7 @@ resource "oci_core_instance" "instance" {
   count = var.instance_count
   // If no explicit AD number, spread instances on all ADs in round-robin. Looping to the first when last AD is reached
   availability_domain  = var.ad_number == null ? element(local.ADs, count.index) : element(local.ADs, var.ad_number - 1)
+  fault_domain         = var.fd_number == null ? null : "FAULT-DOMAIN-${var.fd_number}"
   compartment_id       = var.compartment_ocid
   display_name         = var.instance_display_name == "" ? "" : var.instance_count != 1 ? "${var.instance_display_name}_${count.index + 1}" : var.instance_display_name
   extended_metadata    = var.extended_metadata
@@ -123,7 +124,7 @@ resource "oci_core_instance" "instance" {
   }
 
   create_vnic_details {
-    assign_public_ip = var.public_ip == "NONE" ? var.assign_public_ip : false
+    assign_public_ip = false
     display_name     = var.vnic_name == "" ? "" : var.instance_count != "1" ? "${var.vnic_name}_${count.index + 1}" : var.vnic_name
     hostname_label   = var.hostname_label == "" ? "" : var.instance_count != "1" ? "${var.hostname_label}-${count.index + 1}" : var.hostname_label
     private_ip = element(
@@ -140,7 +141,7 @@ resource "oci_core_instance" "instance" {
   }
 
   metadata = {
-    ssh_authorized_keys = var.ssh_public_keys != null ? var.ssh_public_keys : file(var.ssh_authorized_keys)
+    ssh_authorized_keys = var.ssh_public_keys != null ? var.ssh_public_keys : (var.ssh_authorized_keys != null ? file(var.ssh_authorized_keys) : null)
     user_data           = var.user_data
   }
 

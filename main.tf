@@ -7,6 +7,7 @@ module "instance" {
   defined_tags     = var.defined_tags
   # compute instance parameters
   ad_number                   = 3
+  fd_number                   = var.instance_fd_number
   instance_count              = 1
   instance_display_name       = var.instance_display_name
   instance_state              = var.instance_state
@@ -26,12 +27,26 @@ module "instance" {
   preserve_boot_volume       = false
 }
 
-module "provisioner" {
-  depends_on     = [module.instance.instance]
-  source         = "./modules/provisioner"
+# IMPORTANT: If instance needs to be recreated, run backup first:
+# terraform apply -target="module.backup"
+# This ensures backup runs BEFORE instance destruction
+module "backup" {
+  source         = "./modules/backup"
+  instance_id    = module.instance.instance_id[0]
   instance_ip    = module.instance.public_ip[0]
   user           = var.user
-  privatekeypath = "c:/Users/dazma/.ssh/id_rsa"
-  wg_host        = var.wg_host
-  wg_password    = var.wg_password
+  privatekeypath = var.privatekeypath
+  backup_path    = var.backup_path
+}
+
+module "provisioner" {
+  depends_on            = [module.instance.instance_id, module.backup]
+  source                = "./modules/provisioner"
+  instance_ip           = module.instance.public_ip[0]
+  user                  = var.user
+  privatekeypath        = var.privatekeypath
+  wg_host               = var.wg_host
+  wg_password           = var.wg_password
+  cron_restart_schedule = var.cron_restart_schedule
+  enable_wg_configs     = var.enable_wg_configs
 }
