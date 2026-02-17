@@ -24,3 +24,9 @@ variable "backup_path" {
   default     = "./modules/backup/wg_backup"
 }
 
+variable "enable_auto_backup" {
+  type        = bool
+  description = "If true, backup runs on every terraform apply (not recommended). Prefer -replace for on-demand backups."
+  default     = false
+}
+

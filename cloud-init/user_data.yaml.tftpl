@@ -1,0 +1,142 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+
+packages:
+  - ca-certificates
+  - curl
+  - iptables-persistent
+
+write_files:
+  - path: /etc/sysctl.d/99-vpn-tuning.conf
+    permissions: "0644"
+    owner: root:root
+    content: |
+      net.ipv4.ip_forward=1
+      net.ipv6.conf.all.forwarding=1
+      net.core.rmem_max=33554432
+      net.core.wmem_max=33554432
+      net.core.rmem_default=262144
+      net.core.wmem_default=262144
+      net.ipv4.udp_rmem_min=16384
+      net.ipv4.udp_wmem_min=16384
+      net.core.default_qdisc=fq
+      net.ipv4.tcp_congestion_control=bbr
+
+  - path: /usr/local/sbin/amnezia-host-networking.sh
+    permissions: "0755"
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      PUBLIC_IFACE="$${PUBLIC_IFACE:-${public_interface}}"
+      DOCKER_BRIDGE="$${DOCKER_BRIDGE:-${docker_bridge}}"
+
+      modprobe tcp_bbr >/dev/null 2>&1 || true
+      sysctl --system >/dev/null
+
+      add_mss_rule() {
+        local in_if="$1"
+        local out_if="$2"
+        if iptables -t mangle -C FORWARD -i "$in_if" -o "$out_if" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null; then
+          return 0
+        fi
+        iptables -t mangle -A FORWARD -i "$in_if" -o "$out_if" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+      }
+
+      add_mss_rule "$DOCKER_BRIDGE" "$PUBLIC_IFACE"
+      add_mss_rule "$PUBLIC_IFACE" "$DOCKER_BRIDGE"
+
+      if command -v netfilter-persistent >/dev/null 2>&1; then
+        netfilter-persistent save >/dev/null || true
+      fi
+
+  - path: /usr/local/sbin/amnezia-wg-ensure-mtu.sh
+    permissions: "0755"
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      CONTAINER_NAME="$${CONTAINER_NAME:-${container_name}}"
+      WG_IFACE="$${WG_IFACE:-${wg_iface}}"
+      MTU_VALUE="$${MTU_VALUE:-${mtu}}"
+      TIMEOUT_SECONDS="$${TIMEOUT_SECONDS:-120}"
+
+      if ! command -v docker >/dev/null 2>&1; then
+        exit 0
+      fi
+
+      deadline=$((SECONDS + TIMEOUT_SECONDS))
+      while [ "$SECONDS" -lt "$deadline" ]; do
+        if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+          sleep 2
+          continue
+        fi
+
+        if docker exec "$CONTAINER_NAME" sh -c "ip link show dev '$WG_IFACE' >/dev/null 2>&1"; then
+          docker exec "$CONTAINER_NAME" sh -c "ip link set dev '$WG_IFACE' mtu '$MTU_VALUE'"
+          exit 0
+        fi
+
+        sleep 2
+      done
+
+      exit 0
+
+  - path: /etc/systemd/system/amnezia-host-networking.service
+    permissions: "0644"
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Apply host sysctl tuning and MSS clamping for Amnezia WG
+      Wants=network-online.target
+      After=network-online.target docker.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/amnezia-host-networking.sh
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/amnezia-wg-mtu.service
+    permissions: "0644"
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Ensure WireGuard MTU inside Amnezia container
+      After=docker.service
+      Wants=docker.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/amnezia-wg-ensure-mtu.sh
+
+  - path: /etc/systemd/system/amnezia-wg-mtu.timer
+    permissions: "0644"
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Periodically enforce WireGuard MTU inside Amnezia container
+      After=docker.service
+      Wants=docker.service
+
+      [Timer]
+      OnBootSec=30
+      OnUnitActiveSec=60
+      Unit=amnezia-wg-mtu.service
+
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  - [ bash, -lc, "set -euo pipefail; sysctl --system" ]
+  - [ bash, -lc, "set -euo pipefail; if ! command -v docker >/dev/null 2>&1; then curl -fsSL https://get.docker.com | sh; fi" ]
+  - [ bash, -lc, "set -euo pipefail; systemctl enable --now docker" ]
+  - [ bash, -lc, "set -euo pipefail; systemctl daemon-reload" ]
+  - [ bash, -lc, "set -euo pipefail; systemctl enable --now amnezia-host-networking.service" ]
+  - [ bash, -lc, "set -euo pipefail; systemctl enable --now amnezia-wg-mtu.timer" ]
+
+

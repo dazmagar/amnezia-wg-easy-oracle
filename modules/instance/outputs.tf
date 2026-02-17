@@ -1,9 +1,10 @@
 locals {
+  public_ips = try(oci_core_public_ip.public_ip.*.ip_address, [])
   instances_details = [
     // display name, Primary VNIC Public/Private IP for each instance
-    for i in oci_core_instance.instance : <<EOT
+    for idx, i in oci_core_instance.instance : <<EOT
     ${~i.display_name~}
-    Primary-PublicIP: %{if i.public_ip != ""}${i.public_ip~}%{else}N/A%{endif~}
+    Primary-PublicIP: %{if length(local.public_ips) > idx}${local.public_ips[idx]~}%{else}N/A%{endif~}
     Primary-PrivateIP: ${i.private_ip~}
     EOT
   ]
@@ -26,7 +27,7 @@ output "private_ip" {
 
 output "public_ip" {
   description = "Public IPs of created instances. "
-  value       = oci_core_instance.instance.*.public_ip
+  value       = local.public_ips
 }
 
 output "instance_username" {

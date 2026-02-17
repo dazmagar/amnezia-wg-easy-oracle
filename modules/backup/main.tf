@@ -5,7 +5,7 @@ resource "null_resource" "backup_wireguard_configs" {
   triggers = {
     instance_id = var.instance_id
     instance_ip = var.instance_ip
-    timestamp   = timestamp()
+    timestamp   = var.enable_auto_backup ? timestamp() : ""
   }
 
   # Cross-platform: Try shell script first (works on Linux, macOS, Git Bash on Windows)

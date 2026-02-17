@@ -21,7 +21,9 @@ resource "null_resource" "install_docker" {
     inline = [
       # Check if Docker is already installed and running
       "if sudo docker --version &> /dev/null && sudo systemctl is-active --quiet docker; then",
-      "  echo 'Docker is already installed and running: $(sudo docker --version)'",
+      "  echo \"Docker is already installed and running: $$(sudo docker --version)\"",
+      "  sudo groupadd -f docker || true",
+      "  sudo usermod -aG docker '${var.user}' || true",
       "else",
       "  # If not installed, run installation script",
       "  chmod +x /tmp/startup.sh",
@@ -33,6 +35,8 @@ resource "null_resource" "install_docker" {
       "      exit 1",
       "    fi",
       "  fi",
+      "  sudo groupadd -f docker || true",
+      "  sudo usermod -aG docker '${var.user}' || true",
       "  echo 'Docker installed successfully'",
       "fi"
     ]
@@ -132,18 +136,17 @@ resource "null_resource" "build_amnezia_image" {
   }
 }
 
-data "local_file" "wg0_conf" {
-  count    = var.enable_wg_configs ? 1 : 0
-  filename = "${path.root}/modules/backup/wg_backup/wg0.conf"
-}
-
-data "local_file" "wg0_json" {
-  count    = var.enable_wg_configs ? 1 : 0
-  filename = "${path.root}/modules/backup/wg_backup/wg0.json"
+locals {
+  wg0_conf_path = "${path.root}/modules/backup/wg_backup/wg0.conf"
+  wg0_json_path = "${path.root}/modules/backup/wg_backup/wg0.json"
 }
 
 resource "null_resource" "copy_wireguard_configs" {
-  count = var.enable_wg_configs ? 1 : 0
+  triggers = {
+    instance_ip = var.instance_ip
+    user        = var.user
+    enabled     = tostring(var.enable_wg_configs)
+  }
 
   depends_on = [null_resource.build_amnezia_image]
 
@@ -155,13 +158,20 @@ resource "null_resource" "copy_wireguard_configs" {
     private_key = file(var.privatekeypath)
   }
 
+  provisioner "file" {
+    source      = local.wg0_conf_path
+    destination = "/tmp/wg0.conf"
+  }
+
+  provisioner "file" {
+    source      = local.wg0_json_path
+    destination = "/tmp/wg0.json"
+  }
+
   provisioner "remote-exec" {
     inline = [
-      "mkdir -p /home/${var.user}/.amnezia-wg-easy",
-      "echo '${data.local_file.wg0_conf[0].content}' | sudo tee /home/${var.user}/.amnezia-wg-easy/wg0.conf > /dev/null",
-      "echo '${data.local_file.wg0_json[0].content}' | sudo tee /home/${var.user}/.amnezia-wg-easy/wg0.json > /dev/null",
-      "sudo chown root:root /home/${var.user}/.amnezia-wg-easy/wg0.conf",
-      "sudo chown root:root /home/${var.user}/.amnezia-wg-easy/wg0.json"
+      "if [ \"${var.enable_wg_configs}\" != \"true\" ]; then echo 'WireGuard config restore is disabled (enable_wg_configs=false), skipping'; exit 0; fi",
+      "bash -lc \"set -euo pipefail; if command -v docker >/dev/null 2>&1; then sudo docker stop amnezia-wg-easy >/dev/null 2>&1 || true; fi; sudo install -d -m 0755 -o ${var.user} -g ${var.user} /home/${var.user}/.amnezia-wg-easy; sudo mv /tmp/wg0.conf /home/${var.user}/.amnezia-wg-easy/wg0.conf; sudo mv /tmp/wg0.json /home/${var.user}/.amnezia-wg-easy/wg0.json; sudo chown ${var.user}:${var.user} /home/${var.user}/.amnezia-wg-easy/wg0.conf /home/${var.user}/.amnezia-wg-easy/wg0.json; python3 -c \\\"import codecs; p='/home/${var.user}/.amnezia-wg-easy/wg0.json'; s=codecs.open(p,'r','utf-8-sig').read(); open(p,'w',encoding='utf-8').write(s)\\\"; python3 -c 'import json; d=json.load(open(\\\"/home/${var.user}/.amnezia-wg-easy/wg0.json\\\")); print(\\\"Restored clients count:\\\", len((d.get(\\\"clients\\\") or {}).keys()))'\""
     ]
   }
 }
@@ -173,10 +183,10 @@ resource "null_resource" "run_amnezia_docker_container" {
   ]
 
   triggers = {
-    instance_ip  = var.instance_ip
-    user         = var.user
-    wg_host      = var.wg_host
-    image_built  = null_resource.build_amnezia_image.id
+    instance_ip = var.instance_ip
+    user        = var.user
+    wg_host     = var.wg_host
+    image_built = null_resource.build_amnezia_image.id
   }
 
   connection {
@@ -242,7 +252,7 @@ resource "null_resource" "setup_cron_restart" {
       "  exit 1",
       "}",
       "echo 'Verifying cron job was added...'",
-      "crontab -l | grep -q 'amnezia-wg-easy' && echo 'Cron job verified' || echo 'WARNING: Cron job not found in crontab'"
+      "crontab -l 2>/dev/null | grep -q 'amnezia-wg-easy' && echo 'Cron job verified' || echo 'WARNING: Cron job not found in crontab'"
     ]
   }
 }

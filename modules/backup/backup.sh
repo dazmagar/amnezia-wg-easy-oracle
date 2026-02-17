@@ -38,6 +38,16 @@ YEAR_DIR="$BACKUP_PATH/$YEAR"
 echo "Backup directory: $BACKUP_PATH"
 echo "Starting backup at $TIMESTAMP"
 
+# Common SSH options to suppress warnings/noise
+SSH_OPTS="-i \"$PRIVATE_KEY_PATH\" -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+# Verify container is running before backup
+echo "Checking container status on server..."
+if ! sh -c "ssh $SSH_OPTS \"$USER@$INSTANCE_IP\" \"sudo docker ps --format '{{.Names}}' | grep -qx 'amnezia-wg-easy'\""; then
+  echo "Warning: Container amnezia-wg-easy is not running on $INSTANCE_IP. Skipping backup."
+  exit 0
+fi
+
 # Create year directory if it doesn't exist
 if [ ! -d "$YEAR_DIR" ]; then
   mkdir -p "$YEAR_DIR"
@@ -45,8 +55,14 @@ fi
 
 # Download files from server (one connection per file)
 echo "Downloading wg0.conf from server..."
-if ssh -i "$PRIVATE_KEY_PATH" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$USER@$INSTANCE_IP" "sudo cat /home/$USER/.amnezia-wg-easy/wg0.conf" > "$BACKUP_PATH/wg0.conf" 2>/dev/null; then
-  echo "wg0.conf downloaded"
+if sh -c "ssh $SSH_OPTS \"$USER@$INSTANCE_IP\" \"sudo cat /home/$USER/.amnezia-wg-easy/wg0.conf\"" > "$BACKUP_PATH/wg0.conf"; then
+  if [ -s "$BACKUP_PATH/wg0.conf" ]; then
+    echo "wg0.conf downloaded"
+  else
+    rm -f "$BACKUP_PATH/wg0.conf"
+    echo "Warning: wg0.conf is empty, skipping"
+    exit 1
+  fi
   # Create timestamped copy in year directory
   cp "$BACKUP_PATH/wg0.conf" "$YEAR_DIR/wg0.conf.backup.$TIMESTAMP"
   echo "wg0.conf backup with timestamp created in $YEAR_DIR"
@@ -55,8 +71,14 @@ else
 fi
 
 echo "Downloading wg0.json from server..."
-if ssh -i "$PRIVATE_KEY_PATH" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$USER@$INSTANCE_IP" "sudo cat /home/$USER/.amnezia-wg-easy/wg0.json" > "$BACKUP_PATH/wg0.json" 2>/dev/null; then
-  echo "wg0.json downloaded"
+if sh -c "ssh $SSH_OPTS \"$USER@$INSTANCE_IP\" \"sudo cat /home/$USER/.amnezia-wg-easy/wg0.json\"" > "$BACKUP_PATH/wg0.json"; then
+  if [ -s "$BACKUP_PATH/wg0.json" ]; then
+    echo "wg0.json downloaded"
+  else
+    rm -f "$BACKUP_PATH/wg0.json"
+    echo "Warning: wg0.json is empty, skipping"
+    exit 1
+  fi
   # Create timestamped copy in year directory
   cp "$BACKUP_PATH/wg0.json" "$YEAR_DIR/wg0.json.backup.$TIMESTAMP"
   echo "wg0.json backup with timestamp created in $YEAR_DIR"

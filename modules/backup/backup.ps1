@@ -71,6 +71,23 @@ $yearDir = Join-Path $backupDir $year
 Write-Host "Backup directory: $backupDir"
 Write-Host "Starting backup at $timestamp"
 
+# Common SSH options to suppress warnings/noise
+$sshOptions = @(
+  "-i", $PRIVATE_KEY_PATH,
+  "-o", "LogLevel=ERROR",
+  "-o", "StrictHostKeyChecking=no",
+  "-o", "UserKnownHostsFile=NUL"
+)
+
+# Verify container is running before backup
+Write-Host "Checking container status on server..."
+# This command runs on remote Ubuntu, so we must use grep instead of findstr
+$containerCheck = & $sshPath @sshOptions "$USER@$INSTANCE_IP" "sudo docker ps --format '{{.Names}}' | grep -qx 'amnezia-wg-easy'" 2>$null
+if ($LASTEXITCODE -ne 0) {
+  Write-Warning "Container amnezia-wg-easy is not running on $INSTANCE_IP. Skipping backup."
+  exit 0
+}
+
 # Create year directory if it doesn't exist
 if (-not (Test-Path $yearDir)) {
   New-Item -ItemType Directory -Force -Path $yearDir | Out-Null
@@ -78,10 +95,15 @@ if (-not (Test-Path $yearDir)) {
 
 # Download files from server (one connection per file)
 Write-Host "Downloading wg0.conf from server..."
-$confContent = & $sshPath -i $PRIVATE_KEY_PATH -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL "$USER@$INSTANCE_IP" "sudo cat /home/$USER/.amnezia-wg-easy/wg0.conf" 2>&1
+$confContent = & $sshPath @sshOptions "$USER@$INSTANCE_IP" "sudo cat /home/$USER/.amnezia-wg-easy/wg0.conf" 2>&1
 if ($LASTEXITCODE -eq 0) {
+  if ([string]::IsNullOrWhiteSpace($confContent)) {
+    Write-Error "wg0.conf is empty. Backup aborted."
+    exit 1
+  }
   # Save as latest (without timestamp) for restore
-  $confContent | Out-File -FilePath "$backupDir/wg0.conf" -Encoding utf8 -NoNewline
+  # Write line by line to keep original formatting
+  $confContent | Out-File -FilePath "$backupDir/wg0.conf" -Encoding utf8
   Write-Host "wg0.conf downloaded"
   # Create timestamped copy in year directory
   Copy-Item -Path "$backupDir/wg0.conf" -Destination "$yearDir/wg0.conf.backup.$timestamp"
@@ -91,10 +113,15 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 Write-Host "Downloading wg0.json from server..."
-$jsonContent = & $sshPath -i $PRIVATE_KEY_PATH -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL "$USER@$INSTANCE_IP" "sudo cat /home/$USER/.amnezia-wg-easy/wg0.json" 2>&1
+$jsonContent = & $sshPath @sshOptions "$USER@$INSTANCE_IP" "sudo cat /home/$USER/.amnezia-wg-easy/wg0.json" 2>&1
 if ($LASTEXITCODE -eq 0) {
+  if ([string]::IsNullOrWhiteSpace($jsonContent)) {
+    Write-Error "wg0.json is empty. Backup aborted."
+    exit 1
+  }
   # Save as latest (without timestamp) for restore
-  $jsonContent | Out-File -FilePath "$backupDir/wg0.json" -Encoding utf8 -NoNewline
+  # Same here: preserve multi-line JSON formatting
+  $jsonContent | Out-File -FilePath "$backupDir/wg0.json" -Encoding utf8
   Write-Host "wg0.json downloaded"
   # Create timestamped copy in year directory
   Copy-Item -Path "$backupDir/wg0.json" -Destination "$yearDir/wg0.json.backup.$timestamp"

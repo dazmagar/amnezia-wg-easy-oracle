@@ -18,6 +18,13 @@ module "instance" {
   instance_flex_ocpus         = 1
   # operating system parameters
   ssh_public_keys = file(var.ssh_public_keys)
+  user_data = base64encode(templatefile("${path.module}/cloud-init/user_data.yaml.tftpl", {
+    public_interface = "ens3"
+    docker_bridge    = "docker0"
+    container_name   = "amnezia-wg-easy"
+    wg_iface         = "wg0"
+    mtu              = 1320
+  }))
   # networking parameters
   public_ip    = var.public_ip # NONE, RESERVED or EPHEMERAL
   subnet_ocids = var.subnet_ocids
@@ -31,12 +38,13 @@ module "instance" {
 # terraform apply -target="module.backup"
 # This ensures backup runs BEFORE instance destruction
 module "backup" {
-  source         = "./modules/backup"
-  instance_id    = module.instance.instance_id[0]
-  instance_ip    = module.instance.public_ip[0]
-  user           = var.user
-  privatekeypath = var.privatekeypath
-  backup_path    = var.backup_path
+  source             = "./modules/backup"
+  instance_id        = module.instance.instance_id[0]
+  instance_ip        = module.instance.public_ip[0]
+  user               = var.user
+  privatekeypath     = var.privatekeypath
+  backup_path        = var.backup_path
+  enable_auto_backup = false
 }
 
 module "provisioner" {

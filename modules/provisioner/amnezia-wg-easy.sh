@@ -1,12 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
 container_name="amnezia-wg-easy"
-container_id=$(docker ps -a -q --filter "name=${container_name}")
+container_id=$(sudo docker ps -a -q --filter "name=${container_name}")
 if [ -n "$container_id" ]; then
   echo "Stopping and removing existing container: $container_name"
-  docker stop $container_name
-  docker rm $container_name
+  sudo docker stop $container_name
+  sudo docker rm $container_name
 fi
 
-docker run -d \
+sudo docker run -d \
   --name=amnezia-wg-easy \
   -e LANG=en \
   -e WG_HOST=$1 \
@@ -23,3 +26,13 @@ docker run -d \
   --device=/dev/net/tun:/dev/net/tun \
   --restart unless-stopped \
   amnezia-wg-easy
+
+sleep 2
+if ! sudo docker ps --format '{{.Names}}' | grep -qx "$container_name"; then
+  echo "ERROR: Container $container_name is not running after start" >&2
+  echo "=== docker ps -a ===" >&2
+  sudo docker ps -a --filter "name=$container_name" >&2 || true
+  echo "=== docker logs ===" >&2
+  sudo docker logs --tail 200 "$container_name" >&2 || true
+  exit 1
+fi
